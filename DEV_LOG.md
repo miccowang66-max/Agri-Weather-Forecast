@@ -30,14 +30,14 @@
 ### Environment Variables
 ```
 # ETL (.env)
-CWA_API_TOKEN=CWA-E9804696-FFC6-42F7-9A9B-6A1765EB9A20
-SUPABASE_URL=https://oxvwdsczmpbrspdzzpxa.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+CWA_API_TOKEN=<your_cwa_api_token>
+SUPABASE_URL=<your_supabase_url>
+SUPABASE_KEY=<your_supabase_anon_key>
 
 # Frontend (Vercel Environment Variables)
-NEXT_PUBLIC_SUPABASE_URL=https://oxvwdsczmpbrspdzzpxa.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-NEXT_PUBLIC_WINDY_API_KEY=<user's Windy API key>
+NEXT_PUBLIC_SUPABASE_URL=<your_supabase_url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your_supabase_anon_key>
+NEXT_PUBLIC_WINDY_API_KEY=<your_windy_api_key>
 ```
 
 ### Data Statistics
