@@ -1,0 +1,598 @@
+# cloud.md
+
+# Cloud Deployment & Data Collection Architecture
+
+## Project Context
+
+This project is a weather forecast map web application.
+
+The system will collect weather-related datasets from CWA OpenData APIs after the user provides the required API token.
+
+The current project is a standalone prototype, but it must be designed so that it can later be merged into a larger project.
+
+Future parent project:
+
+* AI Agricultural Decision Intelligence Platform
+* AI + Data Analytics + Interactive Dashboard
+* Weather / Climate / Agriculture Decision Support
+
+Therefore, all cloud, ETL, database, and deployment choices must avoid hard-coding and should remain modular.
+
+---
+
+# 1. Deployment Goal
+
+## Prototype Goal
+
+Build a low-cost, cloud-deployable prototype using mostly free-tier services.
+
+Recommended prototype stack:
+
+```text
+Frontend:
+- React / Next.js
+- Vercel
+
+Database:
+- Supabase PostgreSQL
+- PostGIS enabled
+- JSONB support
+
+ETL:
+- Python scripts
+- GitHub Actions Scheduler
+
+Data Source:
+- CWA OpenData API
+
+Map:
+- Windy API for map visualization only
+```
+
+## Production Upgrade Goal
+
+The prototype should be easy to upgrade into:
+
+```text
+Frontend:
+- React / Next.js
+- Vercel
+
+Backend:
+- FastAPI
+- Docker service
+- Render / Railway / Fly.io / VPS
+
+Database:
+- PostgreSQL + PostGIS
+
+Worker:
+- Docker worker
+- Cron / APScheduler / Celery Beat
+
+AI Layer:
+- LLM Summary
+- Weather Risk Interpretation
+- Agriculture Decision Support
+```
+
+---
+
+# 2. Architecture Principle
+
+## Important Rule
+
+Do not run crawler or scheduled ETL jobs in the frontend.
+
+Frontend is only responsible for:
+
+* UI
+* Map display
+* Dashboard visualization
+* Calling backend/database API
+
+ETL is responsible for:
+
+* Fetching CWA JSON
+* Validating data
+* Normalizing nested JSON
+* Saving data into PostgreSQL
+* Preserving raw JSON when needed
+
+---
+
+# 3. Prototype Cloud Architecture
+
+```text
++--------------------------+
+| React / Next.js Frontend |
+| Vercel                   |
++------------+-------------+
+             |
+             v
++--------------------------+
+| Supabase PostgreSQL      |
+| PostGIS + JSONB          |
++------------+-------------+
+             ^
+             |
++------------+-------------+
+| GitHub Actions Scheduler |
+| Python ETL Scripts       |
++------------+-------------+
+             |
+             v
++--------------------------+
+| CWA OpenData APIs        |
++--------------------------+
+
+Map Visualization:
+React / Next.js -> Windy API
+```
+
+---
+
+# 4. Recommended Folder Structure
+
+Please create the following project structure:
+
+```text
+weather-map-project/
+│
+├── cloud.md
+├── README.md
+├── .gitignore
+├── .env.example
+│
+├── frontend/
+│   ├── package.json
+│   ├── next.config.js
+│   ├── tsconfig.json
+│   ├── app/
+│   ├── components/
+│   ├── lib/
+│   └── styles/
+│
+├── etl/
+│   ├── requirements.txt
+│   ├── config.py
+│   ├── main.py
+│   ├── cwa_client.py
+│   ├── db.py
+│   ├── normalizers/
+│   │   ├── weather_observation.py
+│   │   ├── rainfall_observation.py
+│   │   ├── weather_forecast.py
+│   │   ├── weather_warning.py
+│   │   └── typhoon.py
+│   └── jobs/
+│       ├── fetch_weather_observation.py
+│       ├── fetch_rainfall_observation.py
+│       ├── fetch_weather_forecast.py
+│       ├── fetch_weather_warning.py
+│       └── fetch_typhoon.py
+│
+├── database/
+│   ├── schema.sql
+│   ├── indexes.sql
+│   ├── postgis.sql
+│   └── seed.sql
+│
+├── .github/
+│   └── workflows/
+│       ├── etl_hourly.yml
+│       ├── etl_30min.yml
+│       └── etl_daily.yml
+│
+└── docs/
+    ├── deployment.md
+    ├── data_sources.md
+    ├── environment_variables.md
+    └── merge_notes.md
+```
+
+---
+
+# 5. Environment Variables
+
+Create `.env.example` with the following variables:
+
+```env
+# CWA OpenData
+CWA_API_TOKEN=
+
+# Windy API
+NEXT_PUBLIC_WINDY_API_KEY=
+
+# Supabase
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=
+
+# Environment
+APP_ENV=development
+```
+
+## Security Notes
+
+* `CWA_API_TOKEN` must not be exposed in frontend.
+* `SUPABASE_SERVICE_ROLE_KEY` must not be exposed in frontend.
+* `DATABASE_URL` must only be used by ETL/backend.
+* Only `NEXT_PUBLIC_WINDY_API_KEY` and `SUPABASE_ANON_KEY` may be used in frontend when necessary.
+* Production security rules must be reviewed before public deployment.
+
+---
+
+# 6. Database Requirement
+
+Recommended database:
+
+```text
+PostgreSQL + PostGIS + JSONB
+```
+
+Reason:
+
+* Python ETL can easily write to PostgreSQL.
+* CWA APIs return JSON.
+* PostgreSQL supports JSONB for raw payload backup.
+* PostGIS supports station location, township mapping, distance query, and future GIS analysis.
+* This structure is compatible with future agriculture and climate analytics.
+
+---
+
+# 7. Phase 1 Data Collection Targets
+
+## Required Datasets
+
+| Priority | Dataset ID          | Dataset Name | Table                | Frequency        |
+| -------- | ------------------- | ------------ | -------------------- | ---------------- |
+| ⭐⭐⭐⭐⭐    | O-A0001-001         | 自動氣象站－氣象觀測資料 | weather_observation  | Hourly           |
+| ⭐⭐⭐⭐⭐    | O-A0002-001         | 自動雨量站－雨量觀測資料 | rainfall_observation | Hourly           |
+| ⭐⭐⭐⭐⭐    | F-D0047-093         | 全臺鄉鎮天氣預報     | weather_forecast     | Daily            |
+| ⭐⭐⭐⭐⭐    | Weather Warning API | 豪雨、寒流、高溫、強風等 | weather_warning      | Every 30 minutes |
+| ⭐⭐⭐⭐⭐    | Typhoon API         | 颱風警報、路徑、強度   | typhoon              | Every 30 minutes |
+
+---
+
+# 8. Suggested Database Tables
+
+## weather_observation
+
+Suggested fields:
+
+```text
+id
+station_id
+station_name
+county
+town
+latitude
+longitude
+obs_time
+temperature
+humidity
+wind_speed
+wind_direction
+air_pressure
+weather
+raw_json
+created_at
+updated_at
+```
+
+## rainfall_observation
+
+Suggested fields:
+
+```text
+id
+station_id
+station_name
+county
+town
+latitude
+longitude
+obs_time
+rainfall_10min
+rainfall_1hr
+rainfall_3hr
+rainfall_6hr
+rainfall_12hr
+rainfall_24hr
+raw_json
+created_at
+updated_at
+```
+
+## weather_forecast
+
+Suggested fields:
+
+```text
+id
+location_id
+county
+town
+forecast_time
+start_time
+end_time
+weather
+temperature
+humidity
+rain_probability
+comfort_index
+wind_speed
+wind_direction
+raw_json
+created_at
+updated_at
+```
+
+## weather_warning
+
+Suggested fields:
+
+```text
+id
+warning_type
+title
+description
+severity
+area
+start_time
+end_time
+issued_time
+raw_json
+created_at
+updated_at
+```
+
+## typhoon
+
+Suggested fields:
+
+```text
+id
+typhoon_name
+typhoon_number
+issued_time
+center_latitude
+center_longitude
+max_wind_speed
+pressure
+moving_direction
+moving_speed
+radius
+raw_json
+created_at
+updated_at
+```
+
+---
+
+# 9. GitHub Actions ETL Schedule
+
+## Hourly Jobs
+
+Used for:
+
+* weather_observation
+* rainfall_observation
+
+```yaml
+schedule:
+  - cron: "0 * * * *"
+```
+
+## 30-Minute Jobs
+
+Used for:
+
+* weather_warning
+* typhoon
+
+```yaml
+schedule:
+  - cron: "*/30 * * * *"
+```
+
+## Daily Jobs
+
+Used for:
+
+* weather_forecast
+
+```yaml
+schedule:
+  - cron: "0 2 * * *"
+```
+
+---
+
+# 10. ETL Design Rules
+
+Each ETL job should follow this pattern:
+
+```text
+Fetch CWA API
+↓
+Validate response
+↓
+Normalize JSON
+↓
+Upsert into PostgreSQL
+↓
+Save raw JSON into JSONB
+↓
+Log success or failure
+```
+
+Required ETL behavior:
+
+* Use upsert instead of blind insert.
+* Avoid duplicate records.
+* Store raw API response in `raw_json`.
+* Log failed API calls.
+* Keep dataset-specific normalizers separated.
+* Do not mix ETL logic with frontend logic.
+* Do not hard-code tokens.
+* Use environment variables.
+
+---
+
+# 11. Frontend Design Direction
+
+Frontend should display:
+
+* Windy map layer
+* Weather station markers
+* Rainfall station markers
+* Township forecast layer
+* Weather warning layer
+* Typhoon layer
+* Dashboard summary cards
+
+Frontend should not directly fetch protected CWA APIs.
+
+Frontend reads processed data from:
+
+* Supabase read API, or
+* future backend API
+
+---
+
+# 12. Windy API Role
+
+Windy API is used for map visualization only.
+
+It should not replace CWA OpenData as the official data source.
+
+Use Windy API for:
+
+* Base weather map
+* Wind map
+* Visual weather layer
+* User interaction map
+
+Use CWA OpenData for:
+
+* Official observation data
+* Official rainfall data
+* Official township forecast
+* Official warnings
+* Official typhoon data
+* Database storage
+* Analytics
+* AI summary
+
+---
+
+# 13. Merge Strategy for Future Parent Project
+
+This weather map project will later be merged into a larger AI agriculture platform.
+
+Therefore, please design the project with modular boundaries.
+
+## Future merge target modules
+
+```text
+weather-map/
+weather-etl/
+weather-database/
+weather-dashboard/
+weather-ai-summary/
+```
+
+## Do not hard-code project-specific names
+
+Avoid:
+
+```text
+app-only logic
+single-use table names without namespace
+frontend-dependent ETL
+direct token usage in components
+```
+
+Prefer:
+
+```text
+modular ETL
+clear data contracts
+database schema files
+environment variables
+API abstraction layer
+separate frontend and ETL folders
+```
+
+---
+
+# 14. Immediate Task for IDE Agent
+
+Please create the initial project files based on this `cloud.md`.
+
+Required output:
+
+```text
+1. Create recommended folder structure
+2. Create .env.example
+3. Create database/schema.sql
+4. Create basic ETL Python files
+5. Create GitHub Actions workflow files
+6. Create frontend placeholder structure
+7. Ensure all secrets use environment variables
+8. Do not implement real API token values
+9. Do not expose CWA token in frontend
+10. Keep structure ready for future merge into larger project
+```
+
+---
+
+# 15. Current Development Priority
+
+Current priority is not full production deployment.
+
+Current priority is:
+
+```text
+Prototype-ready cloud structure
++
+ETL-ready project skeleton
++
+Database-ready schema
++
+Future merge compatibility
+```
+
+Do not over-engineer production infrastructure yet.
+
+Docker, FastAPI backend, Redis, and Celery should be reserved for later production upgrade unless required by real prototype evidence.
+
+---
+
+# 16. Recommended Prototype Stack Summary
+
+```text
+Frontend:
+React / Next.js / Vercel
+
+Database:
+Supabase PostgreSQL + PostGIS + JSONB
+
+ETL:
+Python + GitHub Actions Scheduler
+
+Map:
+Windy API
+
+Data:
+CWA OpenData JSON APIs
+
+Future Backend:
+FastAPI + Docker
+
+Future Worker:
+Docker Worker + Cron / APScheduler / Celery Beat
+```

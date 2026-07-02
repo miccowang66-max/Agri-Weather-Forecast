@@ -1,0 +1,17 @@
+# Environment
+.env
+.env.local
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Data (large files)
+data/*.json
+
+# Node
+node_modules/
