@@ -18,6 +18,12 @@ export default function Home() {
   })
 
   useEffect(() => {
+    if (!supabase) {
+      setError('Supabase not configured. Please set environment variables.')
+      setLoading(false)
+      return
+    }
+
     fetchStations()
 
     // Subscribe to realtime updates
@@ -31,11 +37,13 @@ export default function Home() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabase?.removeChannel(channel)
     }
   }, [])
 
   async function fetchStations() {
+    if (!supabase) return
+
     try {
       // Fetch latest observation for each station
       const { data: observations, error: obsError } = await supabase
@@ -127,9 +135,9 @@ export default function Home() {
         height: '100vh',
         background: '#0f172a',
       }}>
-        <div style={{ textAlign: 'center', color: '#ef4444' }}>
+        <div style={{ textAlign: 'center', color: '#ef4444', padding: 20 }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-          <div>錯誤: {error}</div>
+          <div style={{ maxWidth: 400 }}>{error}</div>
         </div>
       </div>
     )
