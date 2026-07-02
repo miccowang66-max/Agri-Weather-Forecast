@@ -53,12 +53,29 @@ CREATE TABLE IF NOT EXISTS etl_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS Policy (允許匿名讀取，用於前端)
+-- RLS Policy
 ALTER TABLE weather_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weather_observations ENABLE ROW LEVEL SECURITY;
 
+-- 允許讀取 (前端)
 CREATE POLICY "Allow public read" ON weather_stations
     FOR SELECT USING (true);
 
 CREATE POLICY "Allow public read" ON weather_observations
     FOR SELECT USING (true);
+
+-- 允許寫入 (ETL)
+CREATE POLICY "Allow public insert" ON weather_stations
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public upsert" ON weather_stations
+    FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public insert" ON weather_observations
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public upsert" ON weather_observations
+    FOR UPDATE USING (true);
+
+-- etl_logs 關閉 RLS (簡化 ETL 寫入)
+ALTER TABLE etl_logs DISABLE ROW LEVEL SECURITY;
