@@ -1,0 +1,30 @@
+name: ETL - Weather Observation (Hourly)
+
+on:
+  schedule:
+    - cron: '5 * * * *'  # 每小時第5分鐘執行
+  workflow_dispatch:  # 允許手動觸發
+
+jobs:
+  fetch-weather-observation:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r etl/requirements.txt
+      
+      - name: Run ETL
+        env:
+          CWA_API_TOKEN: ${{ secrets.CWA_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python etl/fetch_weather_observation.py

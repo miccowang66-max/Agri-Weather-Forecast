@@ -1,6 +1,7 @@
 # Environment
 .env
 .env.local
+.env*.local
 __pycache__/
 *.pyc
 .DS_Store
@@ -10,8 +11,16 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Data (large files)
-data/*.json
+# Python
+*.egg-info/
+venv/
+.venv/
 
 # Node
 node_modules/
+.next/
+out/
+build/
+
+# Supabase
+.supabase/
