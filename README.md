@@ -15,13 +15,21 @@ CWA OpenData API ──► Python ETL ──► Supabase PostgreSQL
                                    Next.js Frontend
                                           │
                                           ▼
-                                   Windy Map (視覺化)
+                              Windy Map (地圖渲染) + 自訂標記
 ```
 
 - **CWA API**: 官方氣象數據來源 (每小時更新)
-- **ETL**: Python 腳本抓取並存儲數據
+- **ETL**: Python 腳本抓取並存儲數據 (GitHub Actions 每小時排程)
 - **Supabase**: PostgreSQL 資料庫
-- **Windy Map**: 前端地圖視覺化
+- **Windy Map**: 前端地圖底層渲染
+- **Leaflet Markers**: 自有觀測資料疊加標記
+
+## 功能說明
+
+- **時間軸**: 過去 7 天日期選擇，每天固定 12:00 觀測時間點
+- **地圖標記**: 彩色圓點顯示各氣象站溫度 (依溫度與降雨著色)
+- **統計面板**: 當前選擇時間的站點數量、平均/最高/最低氣溫
+- **點擊彈窗**: 點擊標記查看完整觀測數據 (天氣、濕度、風速、降雨、氣壓)
 
 ## 快速開始
 
@@ -64,9 +72,9 @@ python fetch_weather_observation.py
 | `CWA_API_TOKEN` | CWA API Token | ETL .env / GitHub Secrets |
 | `SUPABASE_URL` | Supabase API URL | ETL .env / GitHub Secrets |
 | `SUPABASE_KEY` | Supabase Anon Key | ETL .env / GitHub Secrets |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase API URL | Frontend .env.local |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon Key | Frontend .env.local |
-| `NEXT_PUBLIC_WINDY_API_KEY` | Windy API Key | Frontend .env.local |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase API URL | Frontend .env.local / Vercel |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon Key | Frontend .env.local / Vercel |
+| `NEXT_PUBLIC_WINDY_API_KEY` | Windy API Key | Frontend .env.local / Vercel |
 
 ## 資料庫 Schema
 
@@ -91,10 +99,31 @@ CREATE POLICY "Allow public upsert" ON weather_observations FOR UPDATE USING (tr
 ALTER TABLE etl_logs DISABLE ROW LEVEL SECURITY;
 ```
 
+## RPC Function
+
+在 Supabase SQL Editor 執行以加速 Timeline 日期查詢 (選用)：
+
+```sql
+CREATE OR REPLACE FUNCTION get_distinct_observation_times(
+  start_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ
+)
+RETURNS TABLE(obs_time TIMESTAMPTZ)
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  SELECT DISTINCT date_trunc('hour', observation_time) AS obs_time
+  FROM weather_observations
+  WHERE observation_time >= start_time
+    AND observation_time <= end_time
+  ORDER BY obs_time;
+$$;
+```
+
 ## 技術棧
 
 - **Frontend**: Next.js 14 + TypeScript
-- **地圖**: Windy Map Forecast API (基於 Leaflet)
+- **地圖**: Windy Map Forecast API (底圖) + Leaflet (自訂標記)
 - **資料庫**: Supabase (PostgreSQL)
 - **ETL**: Python + httpx + supabase-py
 - **部署**: Vercel (前端) + GitHub Actions (ETL)
