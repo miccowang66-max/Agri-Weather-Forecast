@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { StationWithObservation, WeatherStation } from '@/lib/types'
-import WeatherMap from '@/components/WeatherMap'
+import WindyMap from '@/components/WindyMap'
 import Timeline from '@/components/Timeline'
 
 const TARGET_HOUR = 12
@@ -231,7 +231,7 @@ export default function Home() {
       </header>
 
       <div style={{ height: '100%', paddingTop: 50, paddingBottom: 70 }}>
-        <WeatherMap stations={stations} />
+        <WindyMap stations={stations} />
       </div>
 
       <Timeline onTimeSelect={loadObservationsForTime} availableTimes={availableTimes} />

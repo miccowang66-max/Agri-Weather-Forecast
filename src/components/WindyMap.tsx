@@ -23,40 +23,52 @@ export default function WindyMap({
 }: WindyMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const windyAPIRef = useRef<any>(null)
+  const markersLayerRef = useRef<any>(null)
+  const stationsRef = useRef<StationWithObservation[]>(stations)
+  const mapReadyRef = useRef(false)
+
+  stationsRef.current = stations
 
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!mapRef.current || windyAPIRef.current) return
 
-    // Load Windy API script
-    const script1 = document.createElement('script')
-    script1.src = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.js'
-    script1.onload = () => {
-      const script2 = document.createElement('script')
-      script2.src = 'https://api.windy.com/assets/map-forecast/libBoot.js'
-      script2.onload = () => {
+    const leafletCss = document.createElement('link')
+    leafletCss.rel = 'stylesheet'
+    leafletCss.href = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.css'
+    document.head.appendChild(leafletCss)
+
+    const leafletScript = document.createElement('script')
+    leafletScript.src = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.js'
+    leafletScript.onload = () => {
+      const windyScript = document.createElement('script')
+      windyScript.src = 'https://api.windy.com/assets/map-forecast/libBoot.js'
+      windyScript.onload = () => {
         initWindyMap()
       }
-      document.head.appendChild(script2)
+      document.head.appendChild(windyScript)
     }
-    document.head.appendChild(script1)
+    document.head.appendChild(leafletScript)
 
     return () => {
-      // Cleanup
       if (windyAPIRef.current?.map) {
         windyAPIRef.current.map.remove()
+        windyAPIRef.current = null
       }
+      mapReadyRef.current = false
     }
   }, [])
 
   useEffect(() => {
-    if (windyAPIRef.current && stations.length > 0) {
+    if (mapReadyRef.current && stations.length > 0) {
       addMarkers(stations)
+    } else if (mapReadyRef.current && stations.length === 0) {
+      markersLayerRef.current?.clearLayers()
     }
   }, [stations])
 
   function initWindyMap() {
     const options = {
-      key: process.env.NEXT_PUBLIC_WINDY_API_KEY,
+      key: process.env.NEXT_PUBLIC_WINDY_API_KEY || '',
       verbose: false,
       lat: center[0],
       lon: center[1],
@@ -67,39 +79,23 @@ export default function WindyMap({
       windyAPIRef.current = windyAPI
       const { map } = windyAPI
 
-      // Add markers after map is ready
-      if (stations.length > 0) {
-        addMarkers(stations)
+      const L = window.L
+      const markersLayer = L.layerGroup().addTo(map)
+      markersLayerRef.current = markersLayer
+      mapReadyRef.current = true
+
+      const currentStations = stationsRef.current
+      if (currentStations.length > 0) {
+        addMarkers(currentStations)
       }
     })
-  }
-
-  function getMarkerColor(obs: any): string {
-    if (!obs) return '#6b7280'
-    if (obs.precipitation && obs.precipitation > 0) return '#8b5cf6'
-    if (obs.air_temperature !== null) {
-      if (obs.air_temperature > 33) return '#ef4444'
-      if (obs.air_temperature > 28) return '#f97316'
-      if (obs.air_temperature < 15) return '#3b82f6'
-    }
-    return '#10b981'
-  }
-
-  function formatTemp(temp: number | null): string {
-    if (temp === null) return '-'
-    return `${Math.round(temp)}°`
   }
 
   function addMarkers(stationsData: StationWithObservation[]) {
-    const { map } = windyAPIRef.current
     const L = window.L
+    if (!markersLayerRef.current) return
 
-    // Clear existing layers
-    map.eachLayer((layer: any) => {
-      if (layer instanceof L.Marker) {
-        map.removeLayer(layer)
-      }
-    })
+    markersLayerRef.current.clearLayers()
 
     stationsData.forEach((station) => {
       if (!station.latitude || !station.longitude) return
@@ -108,7 +104,6 @@ export default function WindyMap({
       const color = getMarkerColor(obs)
       const temp = obs ? formatTemp(obs.air_temperature) : '-'
 
-      // Create custom icon
       const icon = L.divIcon({
         className: 'weather-marker',
         html: `<div style="
@@ -131,8 +126,25 @@ export default function WindyMap({
 
       const marker = L.marker([station.latitude, station.longitude], { icon })
         .bindPopup(createPopupContent(station))
-        .addTo(map)
+
+      markersLayerRef.current.addLayer(marker)
     })
+  }
+
+  function getMarkerColor(obs: any): string {
+    if (!obs) return '#6b7280'
+    if (obs.precipitation && obs.precipitation > 0) return '#8b5cf6'
+    if (obs.air_temperature !== null) {
+      if (obs.air_temperature > 33) return '#ef4444'
+      if (obs.air_temperature > 28) return '#f97316'
+      if (obs.air_temperature < 15) return '#3b82f6'
+    }
+    return '#10b981'
+  }
+
+  function formatTemp(temp: number | null): string {
+    if (temp === null) return '-'
+    return `${Math.round(temp)}°`
   }
 
   function createPopupContent(station: StationWithObservation): string {
@@ -168,18 +180,6 @@ export default function WindyMap({
         ` : '<div style="color: #999;">無觀測數據</div>'}
       </div>
     `
-  }
-
-  function formatTimestamp(timestamp: number): string {
-    const date = new Date(timestamp)
-    return date.toLocaleString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
   }
 
   return (
