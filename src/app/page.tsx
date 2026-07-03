@@ -61,13 +61,13 @@ export default function Home() {
           d.setDate(d.getDate() - i)
           const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
           const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
-          const { count } = await supabase!
+          const { data: check } = await supabase!
             .from('weather_observations')
-            .select('observation_time', { count: 'exact', head: true })
+            .select('id')
             .gte('observation_time', start.toISOString())
             .lte('observation_time', end.toISOString())
             .limit(1)
-          if (count && count > 0) {
+          if (check && check.length > 0) {
             dateSet.add(start.getTime())
           }
         }
