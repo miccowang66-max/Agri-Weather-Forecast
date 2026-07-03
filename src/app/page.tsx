@@ -6,6 +6,8 @@ import { StationWithObservation, WeatherStation } from '@/lib/types'
 import WeatherMap from '@/components/WeatherMap'
 import Timeline from '@/components/Timeline'
 
+const TARGET_HOUR = 12
+
 export default function Home() {
   const [stations, setStations] = useState<StationWithObservation[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,7 +77,7 @@ export default function Home() {
         const times: number[] = []
         for (const ts of Array.from(dateSet)) {
           const d = new Date(ts)
-          times.push(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0).getTime())
+          times.push(new Date(d.getFullYear(), d.getMonth(), d.getDate(), TARGET_HOUR, 0, 0).getTime())
         }
         if (latestTs && !times.includes(latestTs)) {
           times.push(latestTs)
@@ -116,39 +118,18 @@ export default function Home() {
       hour12: false
     }))
 
-    const TWO_HOURS = 2 * 60 * 60 * 1000
-    let observations: any[] | null = null
+    const dayStart = new Date(targetTime.getFullYear(), targetTime.getMonth(), targetTime.getDate())
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
 
-    const { data: narrow } = await supabase
+    const { data: observations } = await supabase
       .from('weather_observations')
       .select('*')
-      .gte('observation_time', new Date(timestamp - TWO_HOURS).toISOString())
-      .lte('observation_time', new Date(timestamp + TWO_HOURS).toISOString())
+      .gte('observation_time', dayStart.toISOString())
+      .lte('observation_time', dayEnd.toISOString())
       .order('observation_time', { ascending: true })
       .limit(10000)
 
-    if (latestRequestRef.current !== timestamp) return
-
-    if (narrow && narrow.length > 0) {
-      observations = narrow
-    } else {
-      const dayStart = new Date(targetTime.getFullYear(), targetTime.getMonth(), targetTime.getDate())
-      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
-      const { data: wide } = await supabase
-        .from('weather_observations')
-        .select('*')
-        .gte('observation_time', dayStart.toISOString())
-        .lte('observation_time', dayEnd.toISOString())
-        .order('observation_time', { ascending: true })
-        .limit(10000)
-
-      if (latestRequestRef.current !== timestamp) return
-      observations = wide
-    }
-
-    if (!observations || observations.length === 0) {
-      setStations([])
-      setStats({ count: 0, avgTemp: 0, maxTemp: 0, minTemp: 0 })
+    if (latestRequestRef.current !== timestamp) {
       return
     }
 
@@ -249,7 +230,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div style={{ height: '100%', paddingTop: 50, paddingBottom: 100 }}>
+      <div style={{ height: '100%', paddingTop: 50, paddingBottom: 70 }}>
         <WeatherMap stations={stations} />
       </div>
 
@@ -257,7 +238,7 @@ export default function Home() {
 
       <div style={{
         position: 'fixed',
-        bottom: 120,
+        bottom: 80,
         left: 20,
         zIndex: 1000,
         background: 'rgba(15, 23, 42, 0.9)',
@@ -276,7 +257,7 @@ export default function Home() {
 
       <div style={{
         position: 'fixed',
-        bottom: 120,
+        bottom: 80,
         right: 20,
         zIndex: 1000,
         background: 'rgba(15, 23, 42, 0.9)',
