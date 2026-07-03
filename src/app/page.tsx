@@ -45,17 +45,33 @@ export default function Home() {
         const now = new Date()
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-        const { data: times } = await supabase!
-          .from('weather_observations')
-          .select('observation_time')
-          .gte('observation_time', sevenDaysAgo.toISOString())
-          .lte('observation_time', now.toISOString())
-          .order('observation_time', { ascending: true })
-          .limit(10000)
+        let times: any[] = []
+        try {
+          const { data: rpcTimes } = await supabase!
+            .rpc('get_distinct_observation_times', {
+              start_time: sevenDaysAgo.toISOString(),
+              end_time: now.toISOString()
+            })
+          if (rpcTimes) {
+            times = rpcTimes
+          }
+        } catch {
+          console.warn('RPC not available, falling back to raw query')
+          const { data: rawTimes } = await supabase!
+            .from('weather_observations')
+            .select('observation_time')
+            .gte('observation_time', sevenDaysAgo.toISOString())
+            .lte('observation_time', now.toISOString())
+            .order('observation_time', { ascending: true })
+            .limit(10000)
+          if (rawTimes) {
+            times = rawTimes
+          }
+        }
 
-        if (times) {
+        if (times.length > 0) {
           const uniqueTimestamps = Array.from(
-            new Set(times.map((t: any) => new Date(t.observation_time).getTime()))
+            new Set(times.map((t: any) => new Date(t.obs_time || t.observation_time).getTime()))
           )
           setAvailableTimes(uniqueTimestamps)
         }

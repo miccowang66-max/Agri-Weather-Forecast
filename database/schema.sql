@@ -79,3 +79,22 @@ CREATE POLICY "Allow public upsert" ON weather_observations
 
 -- etl_logs 關閉 RLS (簡化 ETL 寫入)
 ALTER TABLE etl_logs DISABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- RPC Function: 取得不重複的觀測時間 (給 Timeline 用)
+-- 在 Supabase SQL Editor 中執行這段即可建立
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_distinct_observation_times(
+  start_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ
+)
+RETURNS TABLE(obs_time TIMESTAMPTZ)
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  SELECT DISTINCT date_trunc('hour', observation_time) AS obs_time
+  FROM weather_observations
+  WHERE observation_time >= start_time
+    AND observation_time <= end_time
+  ORDER BY obs_time;
+$$;
