@@ -93,16 +93,16 @@ export default function Home() {
       hour12: false
     }))
 
-    const BUFFER_MS = 3 * 60 * 1000
-    const start = new Date(timestamp - BUFFER_MS).toISOString()
-    const end = new Date(timestamp + BUFFER_MS).toISOString()
+    const HALF_HOUR = 30 * 60 * 1000
+    const start = new Date(timestamp - HALF_HOUR).toISOString()
+    const end = new Date(timestamp + HALF_HOUR).toISOString()
 
     const { data: observations, error: obsErr } = await supabase
       .from('weather_observations')
       .select('*')
       .gte('observation_time', start)
       .lte('observation_time', end)
-      .order('observation_time', { ascending: false })
+      .order('observation_time', { ascending: true })
       .limit(10000)
 
     if (latestRequestRef.current !== timestamp) {
@@ -116,12 +116,15 @@ export default function Home() {
 
     const bestPerStation = new Map<string, any>()
     for (const obs of observations || []) {
-      if (bestPerStation.has(obs.station_id)) continue
-      bestPerStation.set(obs.station_id, obs)
+      const obsTs = new Date(obs.observation_time).getTime()
+      const cur = bestPerStation.get(obs.station_id)
+      if (!cur || Math.abs(obsTs - timestamp) < Math.abs(cur.ts - timestamp)) {
+        bestPerStation.set(obs.station_id, { obs, ts: obsTs })
+      }
     }
 
     const result: StationWithObservation[] = []
-    bestPerStation.forEach((obs, stationId) => {
+    bestPerStation.forEach(({ obs }, stationId) => {
       const station = stationsByNameMap.current[stationId]
       if (station) {
         result.push({ ...station, latest_observation: obs })

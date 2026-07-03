@@ -25,56 +25,29 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
   }
 
-  function getDateHourKey(date: Date, hour: number): string {
-    return `${getDateKey(date)}-${hour}`
-  }
-
-  const { timestampsByDateHour, hoursByDate, timestampsByHour } = useMemo(() => {
-    const tsMap = new Map<string, number[]>()
-    const hourMap = new Map<string, number[]>()
-    const bestTsMap = new Map<string, number>()
+  const hoursByDate = useMemo(() => {
+    const map = new Map<string, number[]>()
 
     for (const ts of availableTimes) {
       const d = new Date(ts)
-      const dateKey = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
       const hour = d.getHours()
 
-      if (!tsMap.has(dateKey)) {
-        tsMap.set(dateKey, [])
+      if (!map.has(key)) {
+        map.set(key, [])
       }
-      tsMap.get(dateKey)!.push(ts)
-
-      if (!hourMap.has(dateKey)) {
-        hourMap.set(dateKey, [])
-      }
-      const hours = hourMap.get(dateKey)!
-      if (!hours.includes(hour)) {
-        hours.push(hour)
-      }
-
-      const dhKey = `${dateKey}-${hour}`
-      if (!bestTsMap.has(dhKey) || ts > bestTsMap.get(dhKey)!) {
-        bestTsMap.set(dhKey, ts)
+      const arr = map.get(key)!
+      if (!arr.includes(hour)) {
+        arr.push(hour)
       }
     }
 
-    for (const hours of Array.from(hourMap.values())) {
-      hours.sort((a, b) => a - b)
+    for (const arr of Array.from(map.values())) {
+      arr.sort((a, b) => a - b)
     }
 
-    return {
-      timestampsByDateHour: bestTsMap,
-      hoursByDate: hourMap,
-      timestampsByHour: tsMap,
-    }
+    return map
   }, [availableTimes])
-
-  const timestampsForSelectedDate = useMemo(() => {
-    const key = getDateKey(selectedDate)
-    const all = timestampsByHour.get(key) || []
-    const uniqueSorted = Array.from(new Set(all)).sort((a, b) => a - b)
-    return uniqueSorted
-  }, [selectedDate, timestampsByHour])
 
   function getAvailableHoursForDate(date: Date): number[] {
     return hoursByDate.get(getDateKey(date)) || []
@@ -112,15 +85,14 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
           }
         }
       }
-      const actualTs = timestampsByDateHour.get(getDateHourKey(date, bestHour))
-      if (actualTs !== undefined) {
-        setSelectedTimestamp(actualTs)
-      }
+      const ts = new Date(date.getFullYear(), date.getMonth(), date.getDate(), bestHour, 0, 0)
+      setSelectedTimestamp(ts.getTime())
     }
   }
 
-  function handleTimestampClick(ts: number) {
-    setSelectedTimestamp(ts)
+  function handleHourClick(date: Date, hour: number) {
+    const ts = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, 0, 0)
+    setSelectedTimestamp(ts.getTime())
   }
 
   function formatDate(date: Date): string {
@@ -129,13 +101,6 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
     const weekDays = ['日', '一', '二', '三', '四', '五', '六']
     const weekDay = weekDays[date.getDay()]
     return `${month}/${day} (${weekDay})`
-  }
-
-  function formatTimestamp(ts: number): string {
-    const d = new Date(ts)
-    const hour = d.getHours().toString().padStart(2, '0')
-    const minute = d.getMinutes().toString().padStart(2, '0')
-    return `${hour}:${minute}`
   }
 
   function isToday(date: Date): boolean {
@@ -147,8 +112,10 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
     return d1.toDateString() === d2.toDateString()
   }
 
-  function isSelectedTimestamp(ts: number): boolean {
-    return selectedTimestamp === ts
+  function isSelectedHour(date: Date, hour: number): boolean {
+    if (selectedTimestamp === null) return false
+    const sel = new Date(selectedTimestamp)
+    return sel.toDateString() === date.toDateString() && sel.getHours() === hour
   }
 
   return (
@@ -163,7 +130,6 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
       borderTop: '1px solid rgba(255,255,255,0.1)',
       padding: '12px 0 8px',
     }}>
-      {/* Date selector */}
       <div style={{
         display: 'flex',
         justifyContent: 'center',
@@ -207,12 +173,11 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
         })}
       </div>
 
-      {/* Timestamp selector */}
       <div 
         ref={scrollRef}
         style={{
           display: 'flex',
-          gap: 6,
+          gap: 4,
           overflowX: 'auto',
           padding: '0 20px',
           scrollbarWidth: 'none',
@@ -220,24 +185,28 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
           minHeight: 32,
         }}
       >
-        {timestampsForSelectedDate.length === 0 ? (
-          <div style={{
-            color: '#64748b',
-            fontSize: 11,
-            padding: '6px 0',
-            width: '100%',
-            textAlign: 'center',
-          }}>
-            此時段無觀測資料
-          </div>
-        ) : (
-          timestampsForSelectedDate.map((ts) => {
-            const isFuture = isToday(selectedDate) && ts > now.getTime()
-            const selected = isSelectedTimestamp(ts)
+        {(() => {
+          const availableHours = getAvailableHoursForDate(selectedDate)
+          if (availableHours.length === 0) {
+            return (
+              <div style={{
+                color: '#64748b',
+                fontSize: 11,
+                padding: '6px 0',
+                width: '100%',
+                textAlign: 'center',
+              }}>
+                此時段無觀測資料
+              </div>
+            )
+          }
+          return availableHours.map((hour) => {
+            const isFuture = isToday(selectedDate) && hour > now.getHours()
+            const selected = isSelectedHour(selectedDate, hour)
             return (
               <button
-                key={ts}
-                onClick={() => !isFuture && handleTimestampClick(ts)}
+                key={hour}
+                onClick={() => !isFuture && handleHourClick(selectedDate, hour)}
                 disabled={isFuture}
                 style={{
                   background: isFuture 
@@ -254,21 +223,21 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
                       ? '1px solid rgba(249, 115, 22, 0.5)'
                       : '1px solid transparent',
                   borderRadius: 6,
-                  padding: '6px 10px',
+                  padding: '6px 8px',
                   cursor: isFuture ? 'not-allowed' : 'pointer',
                   fontSize: 11,
                   fontWeight: selected ? 600 : 400,
                   transition: 'all 0.2s ease',
-                  minWidth: 48,
+                  minWidth: 40,
                   flexShrink: 0,
                   opacity: isFuture ? 0.3 : 1,
                 }}
               >
-                {formatTimestamp(ts)}
+                {hour.toString().padStart(2, '0')}:00
               </button>
             )
           })
-        )}
+        })()}
       </div>
     </div>
   )
