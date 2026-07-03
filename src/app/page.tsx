@@ -1,21 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { StationWithObservation } from '@/lib/types'
-import WindyMap from '@/components/WindyMap'
+import { StationWithObservation, WeatherStation } from '@/lib/types'
+import WeatherMap from '@/components/WeatherMap'
+import Timeline from '@/components/Timeline'
 
 export default function Home() {
   const [stations, setStations] = useState<StationWithObservation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+  const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [stats, setStats] = useState({
     count: 0,
     avgTemp: 0,
     maxTemp: 0,
     minTemp: 0,
   })
+
+  const [availableTimes, setAvailableTimes] = useState<number[]>([])
+  const stationsByNameMap = useRef<Record<string, WeatherStation>>({})
+  const latestRequestRef = useRef<number>(0)
 
   useEffect(() => {
     if (!supabase) {
@@ -24,89 +29,117 @@ export default function Home() {
       return
     }
 
-    fetchStations()
+    async function init() {
+      try {
+        const { data: allStations, error: stErr } = await supabase!
+          .from('weather_stations')
+          .select('*')
+        if (stErr) throw stErr
 
-    // Subscribe to realtime updates
-    const channel = supabase
-      .channel('weather_changes')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'weather_observations' },
-        () => fetchStations()
-      )
-      .subscribe()
+        const map: Record<string, WeatherStation> = {}
+        for (const s of allStations || []) {
+          map[s.station_id] = s
+        }
+        stationsByNameMap.current = map
 
-    return () => {
-      supabase?.removeChannel(channel)
+        const now = new Date()
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+        const { data: times } = await supabase!
+          .from('weather_observations')
+          .select('observation_time')
+          .gte('observation_time', sevenDaysAgo.toISOString())
+          .lte('observation_time', now.toISOString())
+          .order('observation_time', { ascending: true })
+          .limit(10000)
+
+        if (times) {
+          const uniqueTimestamps = Array.from(
+            new Set(times.map((t: any) => new Date(t.observation_time).getTime()))
+          )
+          setAvailableTimes(uniqueTimestamps)
+        }
+
+        await loadObservationsForTime(now.getTime())
+        setLoading(false)
+      } catch (err: any) {
+        setError(err.message)
+        setLoading(false)
+      }
     }
+
+    init()
   }, [])
 
-  async function fetchStations() {
+  async function loadObservationsForTime(timestamp: number) {
     if (!supabase) return
 
-    try {
-      // Fetch latest observation for each station
-      const { data: observations, error: obsError } = await supabase
-        .from('weather_observations')
-        .select('*')
-        .order('observation_time', { ascending: false })
-        .limit(1000)
+    const targetTime = new Date(timestamp)
+    const now = new Date()
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-      if (obsError) throw obsError
-
-      // Get unique stations with their latest observation
-      const stationMap = new Map<string, StationWithObservation>()
-      
-      for (const obs of observations || []) {
-        if (!stationMap.has(obs.station_id)) {
-          // Fetch station info
-          const { data: station } = await supabase
-            .from('weather_stations')
-            .select('*')
-            .eq('station_id', obs.station_id)
-            .single()
-
-          if (station) {
-            stationMap.set(obs.station_id, {
-              ...station,
-              latest_observation: obs,
-            })
-          }
-        }
-      }
-
-      const stationsData = Array.from(stationMap.values())
-      setStations(stationsData)
-
-      // Calculate stats
-      const temps = stationsData
-        .map(s => s.latest_observation?.air_temperature)
-        .filter((t): t is number => t !== null)
-
-      if (temps.length > 0) {
-        setStats({
-          count: stationsData.length,
-          avgTemp: Math.round(temps.reduce((a, b) => a + b, 0) / temps.length * 10) / 10,
-          maxTemp: Math.max(...temps),
-          minTemp: Math.min(...temps),
-        })
-      }
-
-      const now = new Date()
-      setLastUpdate(now.toLocaleString('zh-TW', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      }))
-      setLoading(false)
-    } catch (err: any) {
-      setError(err.message)
-      setLoading(false)
+    if (targetTime > now || targetTime < sevenDaysAgo) {
+      return
     }
+
+    latestRequestRef.current = timestamp
+
+    setSelectedTime(targetTime.toLocaleString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }))
+
+    const BUFFER_MS = 3 * 60 * 1000
+    const start = new Date(timestamp - BUFFER_MS).toISOString()
+    const end = new Date(timestamp + BUFFER_MS).toISOString()
+
+    const { data: observations, error: obsErr } = await supabase
+      .from('weather_observations')
+      .select('*')
+      .gte('observation_time', start)
+      .lte('observation_time', end)
+      .order('observation_time', { ascending: false })
+      .limit(10000)
+
+    if (latestRequestRef.current !== timestamp) {
+      return
+    }
+
+    if (obsErr) {
+      console.error('Query error:', obsErr)
+      return
+    }
+
+    const bestPerStation = new Map<string, any>()
+    for (const obs of observations || []) {
+      if (bestPerStation.has(obs.station_id)) continue
+      bestPerStation.set(obs.station_id, obs)
+    }
+
+    const result: StationWithObservation[] = []
+    bestPerStation.forEach((obs, stationId) => {
+      const station = stationsByNameMap.current[stationId]
+      if (station) {
+        result.push({ ...station, latest_observation: obs })
+      }
+    })
+
+    setStations(result)
+
+    const temps = result
+      .map(s => s.latest_observation?.air_temperature)
+      .filter((t): t is number => t !== null)
+
+    setStats({
+      count: result.length,
+      avgTemp: temps.length > 0 ? Math.round(temps.reduce((a, b) => a + b, 0) / temps.length * 10) / 10 : 0,
+      maxTemp: temps.length > 0 ? Math.max(...temps) : 0,
+      minTemp: temps.length > 0 ? Math.min(...temps) : 0,
+    })
   }
 
   if (loading) {
@@ -154,7 +187,6 @@ export default function Home() {
 
   return (
     <main style={{ height: '100vh', position: 'relative' }}>
-      {/* Header */}
       <header style={{
         position: 'fixed',
         top: 0,
@@ -172,19 +204,19 @@ export default function Home() {
           🌤 台灣天氣觀測地圖
         </h1>
         <div style={{ fontSize: 12, color: '#94a3b8' }}>
-          更新時間: {lastUpdate || '-'}
+          {selectedTime ? `顯示時間: ${selectedTime}` : '顯示最新觀測資料'}
         </div>
       </header>
 
-      {/* Map */}
-      <div style={{ height: '100%', paddingTop: 50 }}>
-        <WindyMap stations={stations} />
+      <div style={{ height: '100%', paddingTop: 50, paddingBottom: 100 }}>
+        <WeatherMap stations={stations} />
       </div>
 
-      {/* Stats Panel */}
+      <Timeline onTimeSelect={loadObservationsForTime} availableTimes={availableTimes} />
+
       <div style={{
         position: 'fixed',
-        bottom: 20,
+        bottom: 120,
         left: 20,
         zIndex: 1000,
         background: 'rgba(15, 23, 42, 0.9)',
@@ -201,10 +233,9 @@ export default function Home() {
         <div>最低氣溫: {stats.minTemp}°C</div>
       </div>
 
-      {/* Legend */}
       <div style={{
         position: 'fixed',
-        bottom: 20,
+        bottom: 120,
         right: 20,
         zIndex: 1000,
         background: 'rgba(15, 23, 42, 0.9)',
