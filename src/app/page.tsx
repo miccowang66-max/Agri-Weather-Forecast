@@ -117,23 +117,38 @@ export default function Home() {
     }))
 
     const TWO_HOURS = 2 * 60 * 60 * 1000
-    const start = new Date(timestamp - TWO_HOURS).toISOString()
-    const end = new Date(timestamp + TWO_HOURS).toISOString()
+    let observations: any[] | null = null
 
-    const { data: observations, error: obsErr } = await supabase
+    const { data: narrow } = await supabase
       .from('weather_observations')
       .select('*')
-      .gte('observation_time', start)
-      .lte('observation_time', end)
+      .gte('observation_time', new Date(timestamp - TWO_HOURS).toISOString())
+      .lte('observation_time', new Date(timestamp + TWO_HOURS).toISOString())
       .order('observation_time', { ascending: true })
       .limit(10000)
 
-    if (latestRequestRef.current !== timestamp) {
-      return
+    if (latestRequestRef.current !== timestamp) return
+
+    if (narrow && narrow.length > 0) {
+      observations = narrow
+    } else {
+      const dayStart = new Date(targetTime.getFullYear(), targetTime.getMonth(), targetTime.getDate())
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+      const { data: wide } = await supabase
+        .from('weather_observations')
+        .select('*')
+        .gte('observation_time', dayStart.toISOString())
+        .lte('observation_time', dayEnd.toISOString())
+        .order('observation_time', { ascending: true })
+        .limit(10000)
+
+      if (latestRequestRef.current !== timestamp) return
+      observations = wide
     }
 
-    if (obsErr) {
-      console.error('Query error:', obsErr)
+    if (!observations || observations.length === 0) {
+      setStations([])
+      setStats({ count: 0, avgTemp: 0, maxTemp: 0, minTemp: 0 })
       return
     }
 

@@ -47,8 +47,11 @@ export default function WeatherMap({
   }, [])
 
   useEffect(() => {
-    if (mapReadyRef.current && stations.length > 0) {
+    if (!mapReadyRef.current) return
+    if (stations.length > 0) {
       addMarkers(stations)
+    } else {
+      markersLayerRef.current?.clearLayers()
     }
   }, [stations])
 
