@@ -43,38 +43,45 @@ export default function Home() {
         stationsByNameMap.current = map
 
         const now = new Date()
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-        let times: any[] = []
-        try {
-          const { data: rpcTimes } = await supabase!
-            .rpc('get_distinct_observation_times', {
-              start_time: sevenDaysAgo.toISOString(),
-              end_time: now.toISOString()
-            })
-          if (rpcTimes) {
-            times = rpcTimes
-          }
-        } catch {
-          console.warn('RPC not available, falling back to raw query')
-          const { data: rawTimes } = await supabase!
+        const { data: latestRow } = await supabase!
+          .from('weather_observations')
+          .select('observation_time')
+          .order('observation_time', { ascending: false })
+          .limit(1)
+
+        let latestTs = 0
+        if (latestRow && latestRow.length > 0) {
+          latestTs = new Date(latestRow[0].observation_time).getTime()
+        }
+
+        const dateSet = new Set<number>()
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(now)
+          d.setDate(d.getDate() - i)
+          const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+          const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+          const { count } = await supabase!
             .from('weather_observations')
-            .select('observation_time')
-            .gte('observation_time', sevenDaysAgo.toISOString())
-            .lte('observation_time', now.toISOString())
-            .order('observation_time', { ascending: true })
-            .limit(10000)
-          if (rawTimes) {
-            times = rawTimes
+            .select('observation_time', { count: 'exact', head: true })
+            .gte('observation_time', start.toISOString())
+            .lte('observation_time', end.toISOString())
+            .limit(1)
+          if (count && count > 0) {
+            dateSet.add(start.getTime())
           }
         }
 
-        if (times.length > 0) {
-          const uniqueTimestamps = Array.from(
-            new Set(times.map((t: any) => new Date(t.obs_time || t.observation_time).getTime()))
-          )
-          setAvailableTimes(uniqueTimestamps)
+        const times: number[] = []
+        for (const ts of Array.from(dateSet)) {
+          const d = new Date(ts)
+          times.push(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0).getTime())
         }
+        if (latestTs && !times.includes(latestTs)) {
+          times.push(latestTs)
+        }
+        times.sort((a, b) => a - b)
+        setAvailableTimes(times)
 
         await loadObservationsForTime(now.getTime())
         setLoading(false)
@@ -88,19 +95,13 @@ export default function Home() {
   }, [])
 
   async function loadObservationsForTime(timestamp: number) {
-    if (!supabase) {
-      console.log('[loadObservationsForTime] supabase is null')
-      return
-    }
+    if (!supabase) return
 
     const targetTime = new Date(timestamp)
     const now = new Date()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-    console.log('[loadObservationsForTime] called, targetTime=', targetTime.toLocaleString('zh-TW'))
-
     if (targetTime > now || targetTime < sevenDaysAgo) {
-      console.log('[loadObservationsForTime] out of range, skipping. targetTime > now:', targetTime > now, 'targetTime < sevenDaysAgo:', targetTime < sevenDaysAgo)
       return
     }
 
@@ -115,11 +116,9 @@ export default function Home() {
       hour12: false
     }))
 
-    const HALF_HOUR = 30 * 60 * 1000
-    const start = new Date(timestamp - HALF_HOUR).toISOString()
-    const end = new Date(timestamp + HALF_HOUR).toISOString()
-
-    console.log('[loadObservationsForTime] query range:', start, 'to', end)
+    const TWO_HOURS = 2 * 60 * 60 * 1000
+    const start = new Date(timestamp - TWO_HOURS).toISOString()
+    const end = new Date(timestamp + TWO_HOURS).toISOString()
 
     const { data: observations, error: obsErr } = await supabase
       .from('weather_observations')
@@ -129,15 +128,12 @@ export default function Home() {
       .order('observation_time', { ascending: true })
       .limit(10000)
 
-    console.log('[loadObservationsForTime] query result:', observations?.length ?? 0, 'rows, error:', obsErr)
-
     if (latestRequestRef.current !== timestamp) {
-      console.log('[loadObservationsForTime] stale request, discarding')
       return
     }
 
     if (obsErr) {
-      console.error('[loadObservationsForTime] Query error:', obsErr)
+      console.error('Query error:', obsErr)
       return
     }
 
