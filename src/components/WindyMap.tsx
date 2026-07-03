@@ -19,7 +19,7 @@ declare global {
 export default function WindyMap({ 
   stations, 
   center = [23.7, 121], 
-  zoom = 8 
+  zoom = 8
 }: WindyMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const windyAPIRef = useRef<any>(null)
@@ -170,11 +170,25 @@ export default function WindyMap({
     `
   }
 
+  function formatTimestamp(timestamp: number): string {
+    const date = new Date(timestamp)
+    return date.toLocaleString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  }
+
   return (
-    <div 
-      ref={mapRef} 
-      id="windy" 
-      style={{ width: '100%', height: '100%' }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div 
+        ref={mapRef} 
+        id="windy" 
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
   )
 }

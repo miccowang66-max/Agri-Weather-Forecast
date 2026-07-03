@@ -67,6 +67,7 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
   useEffect(() => {
     if (selectedTimestamp === null) return
     if (initialMount.current) return
+    console.log('[Timeline] selectedTimestamp changed, calling onTimeSelect. ts:', new Date(selectedTimestamp).toLocaleString('zh-TW'))
     onTimeSelect(selectedTimestamp)
   }, [selectedTimestamp])
 
@@ -92,6 +93,7 @@ export default function Timeline({ onTimeSelect, availableTimes }: TimelineProps
 
   function handleHourClick(date: Date, hour: number) {
     const ts = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, 0, 0)
+    console.log('[Timeline] handleHourClick date:', date.toLocaleString('zh-TW'), 'hour:', hour, 'ts:', ts.toLocaleString('zh-TW'))
     setSelectedTimestamp(ts.getTime())
   }
 

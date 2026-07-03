@@ -48,11 +48,15 @@ export default function WeatherMap({
 
   useEffect(() => {
     if (mapReadyRef.current && stations.length > 0) {
+      console.log('[WeatherMap] stations changed, adding markers. count:', stations.length)
       addMarkers(stations)
+    } else {
+      console.log('[WeatherMap] stations changed but skip. mapReady:', mapReadyRef.current, 'stations.length:', stations.length)
     }
   }, [stations])
 
   function initMap() {
+    console.log('[WeatherMap] initMap called')
     const L = window.L
     
     const map = L.map(mapRef.current, {

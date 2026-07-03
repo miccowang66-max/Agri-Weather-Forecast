@@ -72,13 +72,19 @@ export default function Home() {
   }, [])
 
   async function loadObservationsForTime(timestamp: number) {
-    if (!supabase) return
+    if (!supabase) {
+      console.log('[loadObservationsForTime] supabase is null')
+      return
+    }
 
     const targetTime = new Date(timestamp)
     const now = new Date()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
+    console.log('[loadObservationsForTime] called, targetTime=', targetTime.toLocaleString('zh-TW'))
+
     if (targetTime > now || targetTime < sevenDaysAgo) {
+      console.log('[loadObservationsForTime] out of range, skipping. targetTime > now:', targetTime > now, 'targetTime < sevenDaysAgo:', targetTime < sevenDaysAgo)
       return
     }
 
@@ -97,6 +103,8 @@ export default function Home() {
     const start = new Date(timestamp - HALF_HOUR).toISOString()
     const end = new Date(timestamp + HALF_HOUR).toISOString()
 
+    console.log('[loadObservationsForTime] query range:', start, 'to', end)
+
     const { data: observations, error: obsErr } = await supabase
       .from('weather_observations')
       .select('*')
@@ -105,12 +113,15 @@ export default function Home() {
       .order('observation_time', { ascending: true })
       .limit(10000)
 
+    console.log('[loadObservationsForTime] query result:', observations?.length ?? 0, 'rows, error:', obsErr)
+
     if (latestRequestRef.current !== timestamp) {
+      console.log('[loadObservationsForTime] stale request, discarding')
       return
     }
 
     if (obsErr) {
-      console.error('Query error:', obsErr)
+      console.error('[loadObservationsForTime] Query error:', obsErr)
       return
     }
 
